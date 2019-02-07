@@ -1,0 +1,22 @@
+Index: misc/ajax.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- misc/ajax.js	(date 1549530397000)
++++ misc/ajax.js	(date 1549530559000)
+@@ -444,14 +444,6 @@
+   // call by mistake.
+   this.settings = null;
+ 
+-   // If the element that triggered the ajax request is still in the DOM and
+-   // visible, set the focus back to that element.
+-  if (this.form && this.element) {
+-    var $element = this.form.find('[name="' + this.element.name + '"]');
+-    if ($element.length !== 0 && $element.is(':visible')) {
+-      $element.focus();
+-    }
+-   }
+ };
+ 
+ /**
