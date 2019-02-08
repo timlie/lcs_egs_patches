@@ -1,0 +1,25 @@
+From 04ad58d77f2e4a1df032cc87494dc108c364f868 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Fri, 8 Feb 2019 19:24:34 +0100
+Subject: [PATCH 1/1] patched empty class for table
+
+---
+ commerce_price_table.module | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/commerce_price_table.module b/commerce_price_table.module
+index 7630f27..a26dbff 100644
+--- a/commerce_price_table.module
++++ b/commerce_price_table.module
+@@ -460,7 +460,7 @@ function commerce_price_table_field_formatter_view($entity_type, $entity, $field
+ 
+       $header = array($header_old[0], $row[0]);
+       for ($index = 1; $index < count($row); $index++) {
+-        $rows[] = array('data' => array($header_old[$index], $row[$index]['data']));
++        $rows[] = array('data' => array($header_old[$index], $row[$index]['data']), 'class' => array('tablepriceclass'));
+       }
+     }
+     else {
+-- 
+2.14.3 (Apple Git-98)
+
