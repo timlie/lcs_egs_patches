@@ -1,0 +1,169 @@
+From cdcc6b2f5c0e15207e12b48e0b2b7c4b4f28eafa Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Sat, 9 Mar 2019 20:28:04 +0100
+Subject: [PATCH 1/1] Following issue 1367044 log patch for beta4 of feeds
+
+---
+ feeds.install |   2 ++
+ feeds.module  | 112 +++++++++++++++++++++++++++++++++++++++++++++++++++-------
+ 2 files changed, 101 insertions(+), 13 deletions(-)
+
+diff --git a/feeds.install b/feeds.install
+index f743ee7..d3c1e5b 100644
+--- a/feeds.install
++++ b/feeds.install
+@@ -74,6 +74,8 @@ function feeds_uninstall() {
+   variable_del('feeds_importer_class');
+   variable_del('feeds_in_progress_dir');
+   variable_del('feeds_library_dir');
++  variable_del('feeds_log');
++  variable_del('feeds_log_maximum_age');
+   variable_del('feeds_never_use_curl');
+   variable_del('feeds_process_limit');
+   variable_del('feeds_reschedule');
+diff --git a/feeds.module b/feeds.module
+index 2c24962..9299aa4 100644
+--- a/feeds.module
++++ b/feeds.module
+@@ -17,6 +17,20 @@ define('FEEDS_EXPORT_NONE', 0x0);
+ define('FEEDS_BATCH_COMPLETE', 1.0);
+ define('FEEDS_BATCH_ACTIVE', 0.0);
+ 
++/**
++ * Feeds log flag for "feeds_log_methods" variable.
++ *
++ * Log entry will be written to the feeds_log table.
++ */
++define('FEEDS_LOG_DB', 0x0001);
++
++/**
++ * Feeds log flag for "feeds_log_methods" variable.
++ *
++ * Log entry will be passed on to watchdog, except for the dblog module.
++ */
++define('FEEDS_LOG_WATCHDOG', 0x0002);
++
+ /**
+  * @defgroup hooks Hook and callback implementations
+  * @{
+@@ -53,7 +67,7 @@ function feeds_hook_info() {
+ function feeds_cron() {
+   // Expire old log entries.
+   db_delete('feeds_log')
+-    ->condition('request_time', REQUEST_TIME - 604800, '<')
++    ->condition('request_time', REQUEST_TIME - variable_get('feeds_log_maximum_age', 604800), '<')
+     ->execute();
+ 
+   // Find importers that need to be rescheduled.
+@@ -1104,24 +1118,96 @@ function feeds_dbg($msg) {
+ 
+ /**
+  * Writes to feeds log.
++ *
++ * By default, this function will write an entry to the feeds_log table.
++ * You can alter this behavior by setting the "feeds_log_methods" variable.
++ *
++ * Examples:
++ * Write to feeds_log table only (the default):
++ * @code
++ * variable_set('feeds_log_methods', FEEDS_LOG_DB);
++ * @endcode
++ *
++ * Pass log entry to watchdog and do not write to the feeds_log table:
++ * @code
++ * variable_set('feeds_log_methods', FEEDS_LOG_WATCHDOG);
++ * @endcode
++ *
++ * Write to feeds_log and to watchdog:
++ * @code
++ * variable_set('feeds_log_methods', FEEDS_LOG_DB | FEEDS_LOG_WATCHDOG);
++ * @endcode
++ *
++ * Don't write the log message at all:
++ * @code
++ * variable_set('feeds_log_methods', '');
++ * @endcode
++ *
++ * @param string $importer_id
++ *   Identifier of a FeedsImporter object.
++ * @param int $feed_nid
++ *   If importer is attached to content type, feed node id identifying the
++ *   source to be imported.
++ * @param string $type
++ *   The category to which this message belongs.
++ * @param string $message
++ *   The message to store in the log.
++ * @param array $variables
++ *   Array of variables to replace in the message on display or NULL if message
++ *   is already translated or not possible to translate.
++ * @param int $severity
++ *   The severity of the message. See watchdog() for possible values.
+  */
+ function feeds_log($importer_id, $feed_nid, $type, $message, $variables = array(), $severity = WATCHDOG_NOTICE) {
++  global $user, $base_root;
++
+   if ($severity < WATCHDOG_NOTICE) {
+     $error = &drupal_static('feeds_log_error', FALSE);
+     $error = TRUE;
+   }
+-  db_insert('feeds_log')
+-    ->fields(array(
+-      'id' => $importer_id,
+-      'feed_nid' => $feed_nid,
+-      'log_time' => time(),
+-      'request_time' => REQUEST_TIME,
+-      'type' => $type,
+-      'message' => $message,
+-      'variables' => serialize($variables),
+-      'severity' => $severity,
+-    ))
+-    ->execute();
++
++  $log_methods = variable_get('feeds_log_methods', FEEDS_LOG_DB);
++
++  if ($log_methods & FEEDS_LOG_DB) {
++    db_insert('feeds_log')
++      ->fields(array(
++        'id' => $importer_id,
++        'feed_nid' => $feed_nid,
++        'log_time' => time(),
++        'request_time' => REQUEST_TIME,
++        'type' => $type,
++        'message' => $message,
++        'variables' => serialize($variables),
++        'severity' => $severity,
++      ))
++      ->execute();
++  }
++  if ($log_methods & FEEDS_LOG_WATCHDOG) {
++    // Prepare the fields to be logged.
++    $log_entry = array(
++      'type'        => "feeds $importer_id $type",
++      'message'     => $message,
++      'variables'   => $variables,
++      'severity'    => $severity,
++      'link'        => NULL,
++      'user'        => $user,
++      'uid'         => isset($user->uid) ? $user->uid : 0,
++      'request_uri' => $base_root . request_uri(),
++      'referer'     => isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '',
++      'ip'          => ip_address(),
++      // Request time isn't accurate for long processes, use time() instead.
++      'timestamp'   => time(),
++    );
++
++    // Call the logging hooks to log/process the message.
++    foreach (module_implements('watchdog') as $module) {
++      if ($module != 'dblog') {
++        // The Database logging module is skipped here because for database logs
++        // we already have the feeds_log table.
++        module_invoke($module, 'watchdog', $log_entry);
++      }
++    }
++  }
+ }
+ 
+ /**
+-- 
+2.16.3
+
