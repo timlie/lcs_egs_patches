@@ -1,0 +1,28 @@
+diff --git a/search_api_ranges.module b/search_api_ranges.module
+index 2d588c9..edd7a7c 100644
+--- a/search_api_ranges.module
++++ b/search_api_ranges.module
+@@ -304,8 +304,8 @@ function search_api_ranges_block_slider_view_form($form, &$form_state, $variable
+         . $variables['range_field'] . '@to!suffix_' . $variables['range_field'],
+         array(
+           '!field_name' => t($variables['name']),
+-          '@from' => number_format($variables['min'], 0),
+-          '@to' => number_format($variables['max'], 0),
++          '@from' => number_format($variables['min'], 0, ',', '.'),
++          '@to' => number_format($variables['max'], 0, ',', '.'),
+           '!prefix_' . $variables['range_field'] => $variables['prefix'],
+           '!suffix_' . $variables['range_field'] => $variables['suffix'],
+          )
+@@ -592,9 +592,9 @@ function _search_api_generate_range($min, $max, $count, $variables, $params, $la
+   }
+
+   if (empty($label)) {
+-    $label = $variables['prefix'] . number_format($min, 0)
+-      . $variables['suffix'] . '–' . $variables['prefix']
+-      . number_format($max, 0) . $variables['suffix'];
++    $label = $variables['prefix'] . number_format($min, 0, ',', '.')
++      . $variables['suffix'] . '–' . $variables['prefix']
++      . number_format($max, 0, ',', '.') . $variables['suffix'];
+   }
+   // Build up a render array.
+   return array(
