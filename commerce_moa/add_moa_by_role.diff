@@ -1,0 +1,539 @@
+diff --git a/commerce_moa.info b/commerce_moa.info
+old mode 100644
+new mode 100755
+index b8a8d26..04e866e
+--- a/commerce_moa.info
++++ b/commerce_moa.info
+@@ -1,5 +1,5 @@
+-name = Commerce Minimum & Maximum Order Amount
+-description = Allow set minimum & maximum order amount in cart
++name = Commerce Minimum & Maximum Order Amount Per Role
++description = Allow set minimum & maximum order amount in cart per role
+ package = Commerce (contrib)
+ core = 7.x
+
+diff --git a/commerce_moa.install b/commerce_moa.install
+old mode 100644
+new mode 100755
+index 1f27813..46a204d
+--- a/commerce_moa.install
++++ b/commerce_moa.install
+@@ -8,8 +8,17 @@
+  * Implements hook_uninstall().
+  */
+ function commerce_moa_uninstall() {
+-  variable_del('commerce_minimum_order_amount');
+-  variable_del('commerce_maximum_order_amount');
+-  variable_del('commerce_minimum_order_quantity');
+-  variable_del('commerce_moa_disable_button_on_invalid');
++
++  require_once 'commerce_moa.module';
++  variable_del('commerce_moa_roles_precedence');
++
++  $moa_roles = commerce_moa_roles();
++
++  foreach ($moa_roles as $role) {
++    $role_name = str_replace(' ', '_', $role);
++    variable_del('commerce_minimum_order_amount_' . $role_name);
++    variable_del('commerce_maximum_order_amount_' . $role_name);
++    variable_del('commerce_minimum_order_quantity_' . $role_name);
++    variable_del('commerce_moa_disable_button_on_invalid_' . $role_name);
++  }
+ }
+diff --git a/commerce_moa.module b/commerce_moa.module
+old mode 100644
+new mode 100755
+index 6c21587..4a8a48d
+--- a/commerce_moa.module
++++ b/commerce_moa.module
+@@ -2,22 +2,24 @@
+ /**
+  * @file
+  * Store the logic of Commerce MOA module.
++ *
++ * LiFe modified: values per role.
+  */
+
+ /**
+  * Implements hook_menu().
+  */
+ function commerce_moa_menu() {
+-  $items = array();
++  $items = [];
+
+-  $items['admin/commerce/config/moa'] = array(
+-    'title' => 'Minimum & Maximum Order Amount',
+-    'description' => 'Configure the default minimum & maximum order amount value.',
+-    'page callback' => 'drupal_get_form',
+-    'page arguments' => array('commerce_moa_settings_form'),
+-    'access arguments' => array('configure store'),
+-    'type' => MENU_NORMAL_ITEM,
+-  );
++  $items['admin/commerce/config/moa'] = [
++    'title'            => 'Minimum & Maximum Order Amount Per Role',
++    'description'      => 'Configure the default minimum & maximum order amount value per role.',
++    'page callback'    => 'drupal_get_form',
++    'page arguments'   => ['commerce_moa_settings_form'],
++    'access arguments' => ['configure store'],
++    'type'             => MENU_NORMAL_ITEM,
++  ];
+
+   return $items;
+ }
+@@ -26,20 +28,20 @@ function commerce_moa_menu() {
+  * Implements hook_permission().
+  */
+ function commerce_moa_permission() {
+-  $permissions = array(
+-    'access maximum' => array(
+-      'title' => t('Access maximum'),
++  $permissions = [
++    'access maximum'  => [
++      'title'       => t('Access maximum'),
+       'description' => t('Access maximum order amount when checkout.'),
+-    ),
+-    'access minimum' => array(
+-      'title' => t('Access minimum'),
++    ],
++    'access minimum'  => [
++      'title'       => t('Access minimum'),
+       'description' => t('Access minimum order amount when checkout.'),
+-    ),
+-    'access quantity' => array(
+-      'title' => t('Access quantity'),
++    ],
++    'access quantity' => [
++      'title'       => t('Access quantity'),
+       'description' => t('Access order quantity when checkout.'),
+-    ),
+-  );
++    ],
++  ];
+
+   return $permissions;
+ }
+@@ -48,49 +50,77 @@ function commerce_moa_permission() {
+  * Builds the minimum order amount settings form.
+  */
+ function commerce_moa_settings_form($form, &$form_state) {
+-  $form = array();
+-
+-  $form['commerce_minimum_order_amount'] = array(
+-    '#type' => 'textfield',
+-    '#size' => 15,
+-    '#title' => t('Minimum Order Amount'),
+-    '#description' => t('The default minimum order amount. Ex: 11.99 if set 0 then dislable'),
+-    '#default_value' => commerce_moa_default_minimum(),
+-    '#field_suffix' => commerce_default_currency(),
+-  );
+-  $form['commerce_maximum_order_amount'] = array(
+-    '#type' => 'textfield',
+-    '#size' => 15,
+-    '#title' => t('Maximum Order Amount'),
+-    '#description' => t('The default maximum order amount. Ex: 11.99 if set 0 then dislable'),
+-    '#default_value' => commerce_moa_default_maximum(),
+-    '#field_suffix' => commerce_default_currency(),
+-  );
+-  $form['commerce_minimum_order_quantity'] = array(
+-    '#type' => 'textfield',
+-    '#size' => 15,
+-    '#title' => t('Minimum Order Quantity'),
+-    '#description' => t('The default minimum order quantity. Ex: 2 if set 0 then disable'),
+-    '#default_value' => commerce_moa_default_quantity(),
+-  );
+-  $form['commerce_minimum_currency_format'] = array(
+-    '#type' => 'checkbox',
+-    '#title' => t('Currency format'),
+-    '#description' => t('The default currency format if checked: !checked, unchecked: !unchecked', array(
+-      '!checked' => commerce_moa_format_amount(10, commerce_default_currency(), TRUE),
+-      '!unchecked' => commerce_moa_format_amount(10, commerce_default_currency(), FALSE),
+-    )),
+-    '#default_value' => commerce_moa_currency_format(),
+-  );
+-  $form['commerce_moa_disable_button_on_invalid'] = array(
+-    '#type' => 'checkbox',
+-    '#title' => t('Disabled checkout/continue buttons on invalid orders'),
+-    '#description' => t('If an order does not meet the above criteria, a warning
+-    message will be displayed and the checkout/continue button disabled.'),
+-    '#default_value' => commerce_moa_disable_button_on_invalid(),
+-  );
+-
+-  $form['#validate'] = array('commerce_moa_settings_form_validate');
++  $form = [];
++
++  $form['commerce_moa_roles_precedence'] = [
++    '#type'          => 'textfield',
++    '#size'          => 255,
++    '#title'         => t('Roles precedence'),
++    '#description'   =>
++      t('Fill in role names, separated by comma. If user has more roles, the amounts of the first found role in this list are applied.  Available roles<i>: '
++        . _moa_roles_string() . '</i>'),
++    '#default_value' => variable_get('commerce_moa_roles_precedence', _moa_roles_string()),
++  ];
++
++  $form['note'] = [
++    '#markup' => '<label>' . t('Minimum and maximum order amount, miminum order quantity and other settings per role') . '</label>',
++  ];
++
++  $moa_roles = commerce_moa_roles();
++
++  foreach ($moa_roles as $role) {
++
++    $role_name = str_replace(' ', '_', $role);
++
++    $form[$role_name] = [
++      '#type'        => 'fieldset',
++      '#title'       => t('Role:') . $role,
++      '#collapsible' => TRUE,
++      '#collapsed'   => TRUE,
++    ];
++
++    $form[$role_name]['commerce_minimum_order_amount_' . $role_name] = [
++      '#type'          => 'textfield',
++      '#size'          => 15,
++      '#title'         => t('Minimum Order Amount') . ' - ' . $role,
++      '#description'   => t('The default minimum order amount. Ex: 11.99 if set 0 then disable'),
++      '#default_value' => commerce_moa_default_minimum($role_name),
++      '#field_suffix'  => commerce_default_currency(),
++    ];
++    $form[$role_name]['commerce_maximum_order_amount_' . $role_name] = [
++      '#type'          => 'textfield',
++      '#size'          => 15,
++      '#title'         => t('Maximum Order Amount') . ' - ' . $role,
++      '#description'   => t('The default maximum order amount. Ex: 11.99 if set 0 then disable'),
++      '#default_value' => commerce_moa_default_maximum($role_name),
++      '#field_suffix'  => commerce_default_currency(),
++    ];
++    $form[$role_name]['commerce_minimum_order_quantity_' . $role_name] = [
++      '#type'          => 'textfield',
++      '#size'          => 15,
++      '#title'         => t('Minimum Order Quantity') . ' - ' . $role,
++      '#description'   => t('The default minimum order quantity. Ex: 2 if set 0 then disable'),
++      '#default_value' => commerce_moa_default_quantity($role_name),
++    ];
++    $form[$role_name]['commerce_minimum_currency_format_' . $role_name] = [
++      '#type'          => 'checkbox',
++      '#title'         => t('Currency format') . ' - ' . $role,
++      '#description'   => t('The default currency format if checked: !checked, unchecked: !unchecked', [
++        '!checked'   => commerce_moa_format_amount(10, commerce_default_currency(), TRUE),
++        '!unchecked' => commerce_moa_format_amount(10, commerce_default_currency(), FALSE),
++      ]),
++      '#default_value' => commerce_moa_currency_format($role_name),
++    ];
++    $form[$role_name]['commerce_moa_disable_button_on_invalid_' . $role_name] = [
++      '#type'          => 'checkbox',
++      '#title'         => t('Disabled checkout/continue buttons on invalid orders') . ' - ' . $role,
++      '#description'   => t('If an order does not meet the above criteria, a warning
++      message will be displayed and the checkout/continue button disabled.'),
++      '#default_value' => commerce_moa_disable_button_on_invalid($role_name),
++    ];
++  }
++
++  $form['#validate'] = ['commerce_moa_settings_form_validate'];
+
+   return system_settings_form($form);
+ }
+@@ -99,66 +129,149 @@ function commerce_moa_settings_form($form, &$form_state) {
+  * Validate the settings form.
+  */
+ function commerce_moa_settings_form_validate($form, &$form_state) {
+-  $maximum_value = (float) $form_state['values']['commerce_maximum_order_amount'];
+-  $minimum_value = (float) $form_state['values']['commerce_minimum_order_amount'];
+-  $minimum_quantity = (float) $form_state['values']['commerce_minimum_order_quantity'];
++  $roles_precedence = $form_state['values']['commerce_moa_roles_precedence'];
++  $roles = explode(',', $roles_precedence);
++  $invalid_roles = '';
++  foreach ($roles as $role) {
++    if (!user_role_load_by_name($role)) {
++      $invalid_roles .= $role . ',';
++    }
++  }
++  if (!empty($invalid_roles)) {
++    form_set_error('commerce_moa_roles_precedence', t('These roles are invalid: ') . $invalid_roles);
++  }
++  // We require all possible roles to be in the precedence list.
++  $moa_roles = commerce_moa_roles();
++  $diff = array_diff($moa_roles, $roles);
++  if (!empty($diff)) {
++    $missing_roles = '';
++    foreach ($diff as $role) {
++      $missing_roles .= $role . ',';
++    }
++    form_set_error('commerce_moa_roles_precedence', t('These roles are missing: ') . $missing_roles);
++  }
++
++  $moa_roles = commerce_moa_roles();
++
++  foreach ($moa_roles as $role) {
++
++    $role_name = str_replace(' ', '_', $role);
+
+-  if (($maximum_value > 0 && $minimum_value > 0) && ($maximum_value < $minimum_value)) {
+-    form_set_error('moa', t('The maximum value is greater than minimum value.'));
++    $maximum_value = (float) $form_state['values']['commerce_maximum_order_amount_' . $role_name];
++    $minimum_value = (float) $form_state['values']['commerce_minimum_order_amount_' . $role_name];
++    $minimum_quantity = (float) $form_state['values']['commerce_minimum_order_quantity_' . $role_name];
++
++    if (($maximum_value > 0 && $minimum_value > 0) && ($maximum_value < $minimum_value)) {
++      form_set_error($role_name, t('Role:') . " $role. "
++        . t('The maximum value is greater than minimum value.'));
++    }
++    if ($minimum_quantity < 0) {
++      form_set_error($role_name, t('Role:') . " $role. "
++        . t('The minimum order quantity cannot be less than zero.'));
++    }
+   }
+-  if ($minimum_quantity < 0) {
+-    form_set_error('moa', t('The minimum order quantity cannot be less than zero.'));
++}
++
++/**
++ * Returns applicable role name for current user.
++ */
++function commerce_moa_role_name() {
++  global $user;
++  $moa_roles_string = _moa_roles_string();
++  $user_roles = $user->roles;
++  $roles_precedence = variable_get('commerce_moa_roles_precedence', $moa_roles_string);
++  $roles = explode(',', $roles_precedence);
++  foreach ($roles as $role_name) {
++    if (in_array($role_name, $user_roles)) {
++      return str_replace(' ', '_', $role_name);
++    }
++  }
++
++  // No available role found. No minimum/maximum will be applied.
++  return FALSE;
++}
++
++/**
++ * Returns array of roles, that will have own "moa" data.
++ */
++function commerce_moa_roles() {
++  // Eventually exlude some roles, e.g. 'authenticated user' or 'anonymous user'
++  //$exclude = ['authenticated user'];
++  $result = [];
++  $roles = user_roles();
++
++  foreach ($roles as $rid => $role) {
++    $role_object = user_role_load($rid);
++    $result[] = $role_object->name;
+   }
++  //$result = array_diff($result, $exclude);
++
++  return $result;
++}
++
++/**
++ * Returns string of role names.
++ */
++function _moa_roles_string() {
++  $roles = commerce_moa_roles();
++  $result = '';
++  foreach ($roles as $role) {
++    $result .= $role . ',';
++  }
++  $result = substr($result, 0, -1);
++
++  return $result;
+ }
+
+ /**
+  * Return default minimum order amount value, if set is 0 then disable.
+  */
+-function commerce_moa_default_minimum() {
+-  return variable_get('commerce_minimum_order_amount', 0);
++function commerce_moa_default_minimum($role_name) {
++  return variable_get('commerce_minimum_order_amount_' . $role_name, 0);
+ }
+
+ /**
+  * Return default maximum order amount value, if set is 0 then disable.
+  */
+-function commerce_moa_default_maximum() {
+-  return variable_get('commerce_maximum_order_amount', 0);
++function commerce_moa_default_maximum($role_name) {
++  return variable_get('commerce_maximum_order_amount_' . $role_name, 0);
+ }
+
+ /**
+  * Return default maximum order amount value, if set is 0 then disable.
+  */
+-function commerce_moa_default_quantity() {
+-  return variable_get('commerce_minimum_order_quantity', 0);
++function commerce_moa_default_quantity($role_name) {
++  return variable_get('commerce_minimum_order_quantity_' . $role_name, 0);
+ }
+
+ /**
+  * Return default maximum order amount value, if set is 0 then disable.
+  */
+-function commerce_moa_currency_format() {
+-  return variable_get('commerce_minimum_currency_format', 1);
++function commerce_moa_currency_format($role_name) {
++  return variable_get('commerce_minimum_currency_format_' . $role_name, 1);
+ }
+
+ /**
+  * Returns disabled checkout/continue button setting.
+  */
+-function commerce_moa_disable_button_on_invalid() {
+-  return variable_get('commerce_moa_disable_button_on_invalid', 1);
++function commerce_moa_disable_button_on_invalid($role_name) {
++  return variable_get('commerce_moa_disable_button_on_invalid_' . $role_name, 1);
+ }
+
+ /**
+  * Implements hook_form_alter().
+  */
+ function commerce_moa_form_alter(&$form, &$form_state, $form_id) {
+-  $minimum_value = (float) commerce_moa_default_minimum();
+-  $maximum_value = (float) commerce_moa_default_maximum();
+-  $minimum_quantity = commerce_moa_default_quantity();
++  $role_name = commerce_moa_role_name();
++  $minimum_value = (float) commerce_moa_default_minimum($role_name);
++  $maximum_value = (float) commerce_moa_default_maximum($role_name);
++  $minimum_quantity = commerce_moa_default_quantity($role_name);
+
+   if ($minimum_value > 0 || $maximum_value > 0 || $minimum_quantity > 0) {
+     if ($form_id == 'views_form_commerce_cart_form_default') {
+       $form['actions']['checkout']['#validate'][] = 'commerce_moa_checkout_form_validate';
+
+-      if (commerce_moa_disable_button_on_invalid()) {
++      if (commerce_moa_disable_button_on_invalid($role_name)) {
+         $valid = commerce_moa_is_valid_order($form_state['order']);
+         if (!$valid) {
+           $form['actions']['checkout']['#attributes']['disabled'] = TRUE;
+@@ -168,7 +281,7 @@ function commerce_moa_form_alter(&$form, &$form_state, $form_id) {
+     elseif ($form_id == 'commerce_checkout_form_checkout') {
+       $form['buttons']['continue']['#validate'][] = 'commerce_moa_checkout_form_validate';
+
+-      if (commerce_moa_disable_button_on_invalid()) {
++      if (commerce_moa_disable_button_on_invalid($role_name)) {
+         $valid = commerce_moa_is_valid_order($form_state['order']);
+         if (!$valid) {
+           $form['buttons']['continue']['#attributes']['disabled'] = TRUE;
+@@ -178,7 +291,7 @@ function commerce_moa_form_alter(&$form, &$form_state, $form_id) {
+     elseif ($form_id == 'commerce_checkout_form_review') {
+       $form['buttons']['continue']['#validate'][] = 'commerce_moa_checkout_form_validate';
+
+-      if (commerce_moa_disable_button_on_invalid()) {
++      if (commerce_moa_disable_button_on_invalid($role_name)) {
+         $valid = commerce_moa_is_valid_order($form_state['order']);
+         if (!$valid) {
+           $form['buttons']['continue']['#attributes']['disabled'] = TRUE;
+@@ -197,7 +310,7 @@ function commerce_moa_form_alter(&$form, &$form_state, $form_id) {
+  * @param \stdClass $order
+  *   Commerce order to validate.
+  *
+- * @param bool $set_warning
++ * @param bool      $set_warning
+  *   If TRUE, a warning message will be set if the order is considered invalid.
+  *   This gives users more information about why the checkout/continue button
+  *   is disabled (e.g. Their order is less than the minimum).
+@@ -207,13 +320,14 @@ function commerce_moa_form_alter(&$form, &$form_state, $form_id) {
+  *   min order amount or max order amount), TRUE otherwise.
+  */
+ function commerce_moa_is_valid_order($order, $set_warning = TRUE) {
++  $role_name = commerce_moa_role_name();
+   $balance = $order->commerce_order_total[LANGUAGE_NONE][0];
+   $total = commerce_currency_amount_to_decimal($balance['amount'], $balance['currency_code']);
+-  $minimum_quantity = commerce_moa_default_quantity();
+-  $minimum_value = (float) commerce_moa_default_minimum();
+-  $maximum_value = (float) commerce_moa_default_maximum();
++  $minimum_quantity = commerce_moa_default_quantity($role_name);
++  $minimum_value = (float) commerce_moa_default_minimum($role_name);
++  $maximum_value = (float) commerce_moa_default_maximum($role_name);
+
+-  $use_custom_currency_format = commerce_moa_currency_format();
++  $use_custom_currency_format = commerce_moa_currency_format($role_name);
+   $minimum_value_error = commerce_moa_format_amount($minimum_value, $balance['currency_code'], $use_custom_currency_format);
+   $maximum_value_error = commerce_moa_format_amount($maximum_value, $balance['currency_code'], $use_custom_currency_format);
+
+@@ -229,7 +343,7 @@ function commerce_moa_is_valid_order($order, $set_warning = TRUE) {
+           if ($set_warning) {
+             $warning = t('This store requires minimum quantity order of
+             !minimum_quantity per item.',
+-            array('!minimum_quantity' => $minimum_quantity));
++              ['!minimum_quantity' => $minimum_quantity]);
+             drupal_set_message($warning, 'warning', FALSE);
+           }
+
+@@ -243,9 +357,10 @@ function commerce_moa_is_valid_order($order, $set_warning = TRUE) {
+     if ($minimum_value > 0 && $total < $minimum_value) {
+       if ($set_warning) {
+         $warning = t('This store requires minimum order of !minimum_amount.',
+-          array('!minimum_amount' => $minimum_value_error));
++          ['!minimum_amount' => $minimum_value_error]);
+         drupal_set_message($warning, 'warning', FALSE);
+       }
++
+       return FALSE;
+     }
+   }
+@@ -254,9 +369,10 @@ function commerce_moa_is_valid_order($order, $set_warning = TRUE) {
+     if ($maximum_value > 0 && $total > $maximum_value) {
+       if ($set_warning) {
+         $warning = t('This store requires maximum order of !maximum_amount.',
+-          array('!maximum_amount' => $maximum_value_error));
++          ['!maximum_amount' => $maximum_value_error]);
+         drupal_set_message($warning, 'warning', FALSE);
+       }
++
+       return FALSE;
+     }
+   }
+@@ -268,14 +384,15 @@ function commerce_moa_is_valid_order($order, $set_warning = TRUE) {
+  * The validate when direct access to checkout page.
+  */
+ function commerce_moa_checkout_form_validate($form, &$form_state) {
++  $role_name = commerce_moa_role_name();
+   $order = commerce_order_load($form_state['order']->order_id);
+   $balance = $order->commerce_order_total[LANGUAGE_NONE][0];
+   $total = commerce_currency_amount_to_decimal($balance['amount'], $balance['currency_code']);
+-  $minimum_quantity = commerce_moa_default_quantity();
+-  $minimum_value = (float) commerce_moa_default_minimum();
+-  $maximum_value = (float) commerce_moa_default_maximum();
++  $minimum_quantity = commerce_moa_default_quantity($role_name);
++  $minimum_value = (float) commerce_moa_default_minimum($role_name);
++  $maximum_value = (float) commerce_moa_default_maximum($role_name);
+
+-  $use_custom_currency_format = commerce_moa_currency_format();
++  $use_custom_currency_format = commerce_moa_currency_format($role_name);
+   $minimum_value_error = commerce_moa_format_amount($minimum_value, $balance['currency_code'], $use_custom_currency_format);
+   $maximum_value_error = commerce_moa_format_amount($maximum_value, $balance['currency_code'], $use_custom_currency_format);
+
+@@ -288,7 +405,7 @@ function commerce_moa_checkout_form_validate($form, &$form_state) {
+         // Don't check quantity for shipping line item.
+         $is_product = in_array($line_item_wrapper->type->value(), commerce_product_line_item_types());
+         if ($is_product && intval($line_item_wrapper->quantity->value()) < $minimum_quantity) {
+-          form_set_error('order', t('This store requires minimum quantity order of !minimum_quantity per item.', array('!minimum_quantity' => $minimum_quantity)));
++          form_set_error('order', t('This store requires minimum quantity order of !minimum_quantity per item.', ['!minimum_quantity' => $minimum_quantity]));
+         }
+       }
+     }
+@@ -296,13 +413,13 @@ function commerce_moa_checkout_form_validate($form, &$form_state) {
+   // Check access minimum.
+   if (user_access('access minimum')) {
+     if ($minimum_value > 0 && $total < $minimum_value) {
+-      form_set_error('order', t('This store requires minimum order of !minimum_amount.', array('!minimum_amount' => $minimum_value_error)));
++      form_set_error('order', t('This store requires minimum order of !minimum_amount.', ['!minimum_amount' => $minimum_value_error]));
+     }
+   }
+   // Check access maximum.
+   if (user_access('access maximum')) {
+     if ($maximum_value > 0 && $total > $maximum_value) {
+-      form_set_error('order', t('This store requires maximum order of !maximum_amount.', array('!maximum_amount' => $maximum_value_error)));
++      form_set_error('order', t('This store requires maximum order of !maximum_amount.', ['!maximum_amount' => $maximum_value_error]));
+     }
+   }
+ }
+@@ -318,5 +435,8 @@ function commerce_moa_format_amount($amount, $currency_code, $use_custom_currenc
+   else {
+     $result = commerce_currency_format($amount, $currency_code, NULL, FALSE);
+   }
++
+   return $result;
+ }
++
++
