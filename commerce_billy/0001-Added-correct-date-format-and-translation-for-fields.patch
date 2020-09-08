@@ -1,0 +1,44 @@
+From 3e2e4f52aefe0ec9e92b2a47794a53423d306dfc Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Tue, 8 Sep 2020 10:49:23 +0200
+Subject: [PATCH] Added correct date format and translation for fields
+
+---
+ modules/commerce_billy_pdf/commerce_billy_pdf.module | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/modules/commerce_billy_pdf/commerce_billy_pdf.module b/modules/commerce_billy_pdf/commerce_billy_pdf.module
+index 7be6876..5e2ef40 100644
+--- a/modules/commerce_billy_pdf/commerce_billy_pdf.module
++++ b/modules/commerce_billy_pdf/commerce_billy_pdf.module
+@@ -200,7 +200,7 @@ function commerce_billy_pdf_html($orders) {
+ function commerce_billy_pdf_commerce_order_view($order, $view_mode) {
+   // Add content variables for the PDF generation.
+   $settings = variable_get('commerce_billy_pdf_text_settings', array());
+-  $custom_date_format = !empty($settings['invoice_date_format']) ? $settings['invoice_date_format'] : 'Y-m-d';
++  $custom_date_format = !empty($settings['invoice_date_format']) ? $settings['invoice_date_format'] : 'd-m-Y';
+   if ($view_mode == "pdf" || $view_mode == 'canceled') {
+     $order->content['invoice_footer'] = array(
+       '#markup' => isset($settings['invoice_footer']) ? $settings['invoice_footer'] : '',
+@@ -212,7 +212,8 @@ function commerce_billy_pdf_commerce_order_view($order, $view_mode) {
+       '#markup' => isset($settings['invoice_text']) ? $settings['invoice_text'] : '',
+     );
+     $date_field_name = $view_mode == 'pdf' ? 'field_commerce_billy_i_date' : 'field_commerce_billy_cancel_date';
+-    $date_formatted = format_date($order->{$date_field_name}[LANGUAGE_NONE][0]['value'], 'custom', $custom_date_format);
++$date = $order->created;
++$date_formatted = format_date($date, 'custom', $custom_date_format);
+     if (!empty($settings['invoice_location'])) {
+       $invoice_header_date_text = t('@location, @date', array('@location' => $settings['invoice_location'], '@date' => $date_formatted));
+     }
+@@ -223,7 +224,7 @@ function commerce_billy_pdf_commerce_order_view($order, $view_mode) {
+       '#markup' => $invoice_header_date_text,
+     );
+     $order->content['order_number'] = array(
+-      '#markup' => t('Invoice No.: @id', array('@id' => $order->order_number)),
++      '#markup' => t('Bestelnummer: @id', array('@id' => $order->order_number)),
+     );
+     $order->content['order_id'] = array(
+       '#markup' => t('Order No.: @id', array('@id' => $order->order_id)),
+-- 
+2.16.3
+
