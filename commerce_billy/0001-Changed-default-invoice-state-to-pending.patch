@@ -1,0 +1,25 @@
+From 128eb011f83404d1a71261d60ad804d0303f7b41 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Tue, 8 Sep 2020 11:34:28 +0200
+Subject: [PATCH] Changed default invoice state to pending
+
+---
+ modules/commerce_billy_pdf/commerce_billy_pdf.module | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/commerce_billy_pdf/commerce_billy_pdf.module b/modules/commerce_billy_pdf/commerce_billy_pdf.module
+index 5e2ef40..acb9f74 100644
+--- a/modules/commerce_billy_pdf/commerce_billy_pdf.module
++++ b/modules/commerce_billy_pdf/commerce_billy_pdf.module
+@@ -68,7 +68,7 @@ function commerce_billy_pdf_view_access($order) {
+   if ($order->status == 'canceled' && $order->order_id != $order->order_number && user_access('administer commerce_order entities')) {
+     return TRUE;
+   }
+-  elseif ($order->status != 'invoiced') {
++  elseif ($order->status != 'pending') {
+     return FALSE;
+   }
+   return commerce_order_customer_order_view_access($order);
+-- 
+2.16.3
+
