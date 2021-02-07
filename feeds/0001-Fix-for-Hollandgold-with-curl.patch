@@ -1,0 +1,35 @@
+From 79f34aa8708fc4c6d98b6416fda4f634c1447249 Mon Sep 17 00:00:00 2001
+From: timlie <timlievens@gmail.com>
+Date: Sun, 7 Feb 2021 19:18:48 +0100
+Subject: [PATCH] Fix for Hollandgold with curl
+
+---
+ libraries/http_request.inc | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/libraries/http_request.inc b/libraries/http_request.inc
+index 330fc4d..a61eade 100644
+--- a/libraries/http_request.inc
++++ b/libraries/http_request.inc
+@@ -206,7 +206,9 @@ function feeds_http_request($url, array $options = array()) {
+   $url = strtr($url, array('feed://' => 'http://', 'webcal://' => 'http://'));
+ 
+   if ($curl) {
+-    $headers[] = 'User-Agent: Drupal (+http://drupal.org/)';
++    if ($url_parts['host'] != "www.hollandgold.nl") {
++      $headers[] = 'User-Agent: Drupal (+http://drupal.org/)';
++    }
+     $result = new stdClass();
+     $result->headers = array();
+ 
+@@ -280,7 +282,6 @@ function feeds_http_request($url, array $options = array()) {
+           )), curl_errno($download)
+         );
+       }
+-
+       // When using a proxy, remove extra data from the header which is not
+       // considered by CURLINFO_HEADER_SIZE (possibly cURL bug).
+       // This data is only added when to HTTP header when working with a proxy.
+-- 
+2.25.1
+
