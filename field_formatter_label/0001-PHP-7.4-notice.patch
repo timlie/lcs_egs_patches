@@ -1,0 +1,34 @@
+From 65bc1b16e32ac2993ae9b651b434bc7900ed0b06 Mon Sep 17 00:00:00 2001
+From: timlie <timlievens@gmail.com>
+Date: Thu, 9 Dec 2021 12:00:11 +0100
+Subject: [PATCH] PHP 7.4 notice
+
+---
+ field_formatter_label.module | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/field_formatter_label.module b/field_formatter_label.module
+index bf58e9b..9d3d038 100644
+--- a/field_formatter_label.module
++++ b/field_formatter_label.module
+@@ -71,10 +71,12 @@ function field_formatter_label_theme_registry_alter(&$theme_registry) {
+ function field_formatter_label_preprocess_field(&$variables) {
+   $view_mode = $variables['element']['#view_mode'];
+   $field = field_info_instance($variables['element']['#entity_type'], $variables['element']['#field_name'], $variables['element']['#bundle']);
+-  $settings = isset($field['display'][$view_mode]['settings']) ? $field['display'][$view_mode]['settings'] : $field['display']['default']['settings'];
+-  if ($variables['element']['#label_display'] != 'hidden' &&
+-    isset($settings['field_formatter_label']) &&
+-    strlen(trim($settings['field_formatter_label'])) > 0) {
+-    $variables['label'] = t(check_plain($settings['field_formatter_label']));
++  if (!empty($field)) {
++    $settings = isset($field['display'][$view_mode]['settings']) ? $field['display'][$view_mode]['settings'] : $field['display']['default']['settings'];
++    if ($variables['element']['#label_display'] != 'hidden' &&
++      isset($settings['field_formatter_label']) &&
++      strlen(trim($settings['field_formatter_label'])) > 0) {
++      $variables['label'] = t(check_plain($settings['field_formatter_label']));
++    }
+   }
+ }
+-- 
+2.25.1
+
