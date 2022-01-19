@@ -1,0 +1,25 @@
+From f07d8b8f45e492a53d226882afa4f5da57d58d61 Mon Sep 17 00:00:00 2001
+From: timlie <timlievens@gmail.com>
+Date: Wed, 19 Jan 2022 22:28:42 +0100
+Subject: [PATCH] Minimum order amount as error message instead of warning
+
+---
+ commerce_moa.module | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/commerce_moa.module b/commerce_moa.module
+index 1dd262e..162e7d8 100755
+--- a/commerce_moa.module
++++ b/commerce_moa.module
+@@ -358,7 +358,7 @@ function commerce_moa_is_valid_order($order, $set_warning = TRUE) {
+       if ($set_warning) {
+         $warning = t('This store requires minimum order of !minimum_amount.',
+           ['!minimum_amount' => $minimum_value_error]);
+-        drupal_set_message($warning, 'warning', FALSE);
++        drupal_set_message($warning, 'error', FALSE);
+       }
+ 
+       return FALSE;
+-- 
+2.25.1
+
